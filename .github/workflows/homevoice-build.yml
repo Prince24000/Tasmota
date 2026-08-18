@@ -1,0 +1,48 @@
+# HomeVoice's Tasmota build, run on GitHub's machines.
+#
+# DROP THIS FILE AT:  .github/workflows/homevoice-build.yml  (in YOUR fork)
+#
+# Why this exists: building Tasmota locally needs ~400 MB of toolchain
+# downloads that a mobile-data connection keeps killing. This runs the SAME
+# `platformio run -e tasmota32` on GitHub's runners — datacenter bandwidth,
+# free for public repos — and hands back only the ~2 MB binaries.
+#
+# Trigger is MANUAL (workflow_dispatch): nothing builds until you press the
+# button, and pushes to the fork never surprise-build anything.
+
+name: Build HomeVoice Tasmota
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this fork (the branch you run it on)
+        uses: actions/checkout@v4
+
+      - name: Python for PlatformIO
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Build tasmota32 (with user_config_override.h in this fork)
+        run: platformio run -e tasmota32
+
+      # Tasmota's build normally copies finished binaries to
+      # build_output/firmware/; the raw PlatformIO output dir is included
+      # too in case a version puts them only there. Either way the artifact
+      # carries both the OTA image (tasmota32.bin) and the factory image
+      # (tasmota32.factory.bin).
+      - name: Collect the binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasmota32-homevoice
+          path: |
+            build_output/firmware/*
+            .pio/build/tasmota32/tasmota32*.bin
+          if-no-files-found: error
