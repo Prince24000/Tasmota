@@ -9,6 +9,13 @@
 #
 # Trigger is MANUAL (workflow_dispatch): nothing builds until you press the
 # button, and pushes to the fork never surprise-build anything.
+#
+# THE TWO "PROVE IT" STEPS are here because the first build came out
+# without RC522: the override file was not where the compiler looks, the
+# build went green anyway, and the miss only showed up after a download,
+# an OTA and a `GPIOs` on the board. A green run must now MEAN the driver
+# is in — so the run fails before the build if the override is missing,
+# and fails after the build if the linker map has no RC522 in it.
 
 name: Build HomeVoice Tasmota
 
@@ -20,10 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out this fork (the branch you run it on)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      # The compiler reads tasmota/user_config_override.h and nowhere else.
+      # A file at the repo root, or on another branch, is silently ignored
+      # and the build is stock. So: refuse to build unless it is exactly
+      # here, and print it so the run log shows what was compiled in.
+      - name: Prove the override is where the compiler looks
+        run: |
+          test -f tasmota/user_config_override.h || {
+            echo "::error::tasmota/user_config_override.h is missing on this branch — the build would be stock."
+            exit 1
+          }
+          echo "--- tasmota/user_config_override.h ---"
+          cat tasmota/user_config_override.h
 
       - name: Python for PlatformIO
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -33,13 +53,40 @@ jobs:
       - name: Build tasmota32 (with user_config_override.h in this fork)
         run: platformio run -e tasmota32
 
+      # Tasmota links with -Wl,-Map, so the map lists every symbol and
+      # object file that made it into the binary. Each driver the override
+      # asks for must leave its trace there; zero hits means it was NOT
+      # compiled in no matter what the override says — and the run must say
+      # so here, not on a board later. One marker per driver, so a
+      # misspelled define fails ITS line by name instead of hiding behind
+      # the others.
+      - name: Prove every requested driver is inside the binary
+        run: |
+          MAP=.pio/build/tasmota32/firmware.map
+          test -f "$MAP" || { echo "::error::no linker map at $MAP"; exit 1; }
+          FAILED=0
+          require() {  # require <label> <grep -E pattern>
+            HITS=$(grep -Eci "$2" "$MAP" || true)
+            echo "$1: $HITS symbol(s) in the linker map"
+            if [ "$HITS" -eq 0 ]; then
+              echo "::error::$1 is NOT in this build — check its define in tasmota/user_config_override.h"
+              FAILED=1
+            fi
+          }
+          require "RC522 card reader"      'mfrc522'
+          require "Character LCD"          'xdsp_01|liquidcrystal'
+          require "TM1637 seven-segment"   'tm1637'
+          require "MAX7219 dot matrix"     'max7219'
+          require "MPU6050 IMU"            'mpu6050'
+          exit $FAILED
+
       # Tasmota's build normally copies finished binaries to
       # build_output/firmware/; the raw PlatformIO output dir is included
       # too in case a version puts them only there. Either way the artifact
       # carries both the OTA image (tasmota32.bin) and the factory image
       # (tasmota32.factory.bin).
       - name: Collect the binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: tasmota32-homevoice
           path: |
