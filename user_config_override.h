@@ -161,10 +161,15 @@
 #endif                            /*   pinned so no future default set   */
                                   /*   can quietly drop it               */
 
-/* -- displays: the OLED joins the sweep ------------------------------- */
-#ifndef USE_DISPLAY_SSD1306
-#define USE_DISPLAY_SSD1306       /* 0.96" OLED 128x64 @ 0x3C, Model 2   */
-#endif
+/* -- NO OLED define, and the reason is a CI catch (2026-08-25):
+   USE_DISPLAY_SSD1306 was defined here, the build went green, and the
+   string-proof found NO ssd1306 in the binary -- no driver, no library
+   in the dependency graph. In this Tasmota the define is a name with
+   nothing behind it: OLEDs are driven by the UNIVERSAL display driver
+   from a descriptor file loaded onto the board, which is an integration
+   design job (get display.ini to the board's filesystem), not a define.
+   Parked with the harvest list; the catalogue offers no OLED entry
+   until a board has proven one.                                       */
 
 /* ==== HARVEST-PENDING GPIO DRIVERS -- compiled NOW, catalogued at the
    next bench session. These take GPIO pins, so their catalogue entries
