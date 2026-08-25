@@ -129,7 +129,6 @@ jobs:
           embeds "SI1145"         'SI1145'
           embeds "MAX44009"       'MAX44009'
           embeds "BH1750"         'BH1750'
-          embeds "SSD1306 OLED"   'SSD1306'
           embeds "HX711 scale"    'HX711'
           embeds "PMS5003"        'PMS5003'
           embeds "MH-Z19"         'MHZ19'
