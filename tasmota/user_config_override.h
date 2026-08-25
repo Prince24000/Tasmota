@@ -51,4 +51,148 @@
 /* ---- Motion IMU (MPU6050 gyro + accelerometer, I2C 0x68) ----------- */
 #define USE_MPU6050
 
+/* ==== THE I2C SWEEP -- 2026-08-25 ===================================
+   Every catalogue entry added in the sweep has its driver named here,
+   and every define here has a string-proof grep in homevoice-build.yml
+   (the driver's own tele-SENSOR name, searched in the BUILT BINARY --
+   the check_firmware.py method promoted to CI). A green run MEANS all
+   of these are in the image.
+
+   #ifndef-guarded because several are already on in Tasmota's defaults;
+   redefining one would only make the compiler grumble about a fact.  */
+
+/* -- temperature / humidity / pressure ------------------------------- */
+#ifndef USE_SHT3X
+#define USE_SHT3X                 /* SHT30/31/35 @ 0x44-0x45             */
+#endif
+#ifndef USE_AHT2x
+#define USE_AHT2x                 /* AHT20/21 @ 0x38                     */
+#endif
+#ifndef USE_HTU
+#define USE_HTU                   /* HTU21 / SI7021 (GY-21) @ 0x40       */
+#endif
+#ifndef USE_AM2320
+#define USE_AM2320                /* AM2320 @ 0x5C                       */
+#endif
+#ifndef USE_BMP
+#define USE_BMP                   /* BMP085/180/280 + BME280 @ 0x76-77   */
+#endif
+#ifndef USE_BME68X
+#define USE_BME68X                /* BME680/688 @ 0x76-77                */
+#endif
+#ifndef USE_MLX90614
+#define USE_MLX90614              /* IR thermometer @ 0x5A               */
+#endif
+
+/* -- soil ------------------------------------------------------------- */
+#ifndef USE_SEESAW_SOIL
+#define USE_SEESAW_SOIL           /* Adafruit capacitive @ 0x36          */
+#endif
+#ifndef USE_CHIRP
+#define USE_CHIRP                 /* Chirp! @ 0x20                       */
+#endif
+
+/* -- distance / motion ------------------------------------------------ */
+#ifndef USE_VL53L0X
+#define USE_VL53L0X               /* laser ToF 2 m @ 0x29                */
+#endif
+#ifndef USE_VL53L1X
+#define USE_VL53L1X               /* laser ToF 4 m @ 0x29 (fit ONE)      */
+#endif
+#ifndef USE_QMC5883L
+#define USE_QMC5883L              /* GY-271 clone compass @ 0x0D         */
+#endif
+#ifndef USE_HMC5883L
+#define USE_HMC5883L              /* genuine Honeywell compass @ 0x1E    */
+#endif
+
+/* -- electrical ------------------------------------------------------- */
+#ifndef USE_ADS1115
+#define USE_ADS1115               /* 4-ch 16-bit ADC @ 0x48-0x4B         */
+#endif
+#ifndef USE_INA226
+#define USE_INA226                /* DC V/A @ 0x40+ -- jumper it off     */
+#endif                            /*   0x40; the HTU21 lives there       */
+
+/* -- weather ---------------------------------------------------------- */
+#ifndef USE_AS3935
+#define USE_AS3935                /* lightning detector @ 0x03           */
+#endif
+
+/* -- air quality ------------------------------------------------------ */
+#ifndef USE_SGP30
+#define USE_SGP30                 /* TVOC / eCO2 @ 0x58                  */
+#endif
+#ifndef USE_CCS811
+#define USE_CCS811                /* eCO2 / TVOC @ 0x5A (WAKE to GND)    */
+#endif
+#ifndef USE_SCD30
+#define USE_SCD30                 /* true CO2 @ 0x61                     */
+#endif
+#ifndef USE_SCD40
+#define USE_SCD40                 /* true CO2 @ 0x62                     */
+#endif
+#ifndef USE_SEN5X
+#define USE_SEN5X                 /* PM + VOC @ 0x69 (keep MPU AD0 low)  */
+#endif
+
+/* -- light and UV ----------------------------------------------------- */
+#ifndef USE_VEML7700
+#define USE_VEML7700              /* lux, wide range @ 0x10              */
+#endif
+#ifndef USE_VEML6070
+#define USE_VEML6070              /* UV index @ 0x38+0x39                */
+#endif
+#ifndef USE_SI1145
+#define USE_SI1145                /* visible+IR+UV @ 0x60                */
+#endif
+#ifndef USE_MAX44009
+#define USE_MAX44009              /* GY-49 lux @ 0x4A                    */
+#endif
+#ifndef USE_BH1750
+#define USE_BH1750                /* GY-302 lux @ 0x23 -- default-on,    */
+#endif                            /*   pinned so no future default set   */
+                                  /*   can quietly drop it               */
+
+/* -- displays: the OLED joins the sweep ------------------------------- */
+#ifndef USE_DISPLAY_SSD1306
+#define USE_DISPLAY_SSD1306       /* 0.96" OLED 128x64 @ 0x3C, Model 2   */
+#endif
+
+/* ==== HARVEST-PENDING GPIO DRIVERS -- compiled NOW, catalogued at the
+   next bench session. These take GPIO pins, so their catalogue entries
+   need component codes READ OFF A BOARD's short `GPIOs` answer (the
+   house method -- codes are never guessed). Building the drivers in
+   today means ONE paste from the first board flashed with this image
+   harvests every code at once: HX711, PMS5003, MH-Z19, SDS011, plus
+   the TM1637 and MAX7219 codes still owed from 2026-08-24.          */
+#ifndef USE_HX711
+#define USE_HX711                 /* load cell -- a scale under anything */
+#endif
+#ifndef USE_PMS5003
+#define USE_PMS5003               /* particulate matter, UART            */
+#endif
+#ifndef USE_MHZ19
+#define USE_MHZ19                 /* CO2, UART (the classic MH-Z19)      */
+#endif
+#ifndef USE_NOVA_SDS
+#define USE_NOVA_SDS              /* SDS011 particulate, UART            */
+#endif
+
+/* ==== DELIBERATELY NOT SWEPT -- each for a reason worth keeping ======
+   USE_PCF8574   The I/O-expander driver claims 0x20-0x27 -- the SAME
+                 chip and addresses the LCD backpack uses. Enabling it
+                 would have two drivers fighting over the bedroom LCD.
+   USE_DS3231    The RTC lives at 0x68, which is the MPU6050's address.
+                 Boards take time from the network here anyway.
+   USE_APDS9960  Its own define disables SHT and VEML6070 (address
+                 fights); gesture lost the trade against UV + the SHT
+                 family.
+   USE_TSL2561 / USE_TSL2591   0x39 and 0x29 crowd the VL53L0X and
+                 others; four light sensors are already swept.
+   USE_MCP230xx / USE_PCA9685  Real expanders, but each needs its own
+                 per-pin configuration flow -- an honest entry is a
+                 design job, not a define. Parked with the custom door.
+*/
+
 #endif
