@@ -80,6 +80,62 @@ jobs:
           require "MPU6050 IMU"            'mpu6050'
           exit $FAILED
 
+      # THE SWEEP'S PROOFS (2026-08-25). The linker map can lie about a
+      # sensor whose object file compiles empty behind its #ifdef -- so
+      # these check the BUILT BINARY for each driver's own tele-SENSOR
+      # name string, which only exists when the driver's code does. This
+      # is check_firmware.py's name-vs-driver method promoted to CI: a
+      # green run MEANS every swept sensor is in the image, and a define
+      # that falls out of the override fails ITS OWN line by name.
+      - name: Prove every swept sensor left its string in the binary
+        run: |
+          BIN=.pio/build/tasmota32/firmware.bin
+          [ -f "$BIN" ] || BIN=.pio/build/tasmota32/tasmota32.bin
+          [ -f "$BIN" ] || BIN=$(ls build_output/firmware/tasmota32.bin 2>/dev/null | head -1)
+          test -f "$BIN" || { echo "::error::no built binary found to string-check"; exit 1; }
+          echo "checking strings in: $BIN"
+          FAILED=0
+          embeds() {  # embeds <label> <string only the driver carries>
+            if grep -aiq -- "$2" "$BIN"; then
+              echo "in: $1"
+            else
+              echo "::error::$1 is NOT in this build -- its define fell out of tasmota/user_config_override.h"
+              FAILED=1
+            fi
+          }
+          embeds "SHT3x"          'SHT3X'
+          embeds "AHT2x"          'AHT2'
+          embeds "HTU21/SI7021"   'HTU21'
+          embeds "AM2320"         'AM2320'
+          embeds "BMP/BME280"     'BMP280'
+          embeds "BME680"         'BME680'
+          embeds "MLX90614"       'MLX90614'
+          embeds "Seesaw soil"    'eesaw'
+          embeds "Chirp soil"     'hirp'
+          embeds "VL53L0X"        'VL53L0X'
+          embeds "VL53L1X"        'VL53L1X'
+          embeds "QMC5883L"       'QMC5883L'
+          embeds "HMC5883L"       'HMC5883L'
+          embeds "ADS1115"        'ADS1115'
+          embeds "INA226"         'INA226'
+          embeds "AS3935"         'AS3935'
+          embeds "SGP30"          'SGP30'
+          embeds "CCS811"         'CCS811'
+          embeds "SCD30"          'SCD30'
+          embeds "SCD40"          'SCD4'
+          embeds "SEN5x"          'SEN5'
+          embeds "VEML7700"       'VEML7700'
+          embeds "VEML6070"       'VEML6070'
+          embeds "SI1145"         'SI1145'
+          embeds "MAX44009"       'MAX44009'
+          embeds "BH1750"         'BH1750'
+          embeds "SSD1306 OLED"   'SSD1306'
+          embeds "HX711 scale"    'HX711'
+          embeds "PMS5003"        'PMS5003'
+          embeds "MH-Z19"         'MHZ19'
+          embeds "SDS011"         'SDS0'
+          exit $FAILED
+
       # Tasmota's build normally copies finished binaries to
       # build_output/firmware/; the raw PlatformIO output dir is included
       # too in case a version puts them only there. Either way the artifact
