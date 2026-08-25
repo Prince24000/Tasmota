@@ -123,8 +123,15 @@
 #ifndef USE_SGP30
 #define USE_SGP30                 /* TVOC / eCO2 @ 0x58                  */
 #endif
-#ifndef USE_CCS811
-#define USE_CCS811                /* eCO2 / TVOC @ 0x5A (WAKE to GND)    */
+/* NOT USE_CCS811. Tasmota keeps TWO drivers for this chip in the same
+   Xsns slot 31 -- legacy (USE_CCS811) and V2 (USE_CCS811_V2, multiple
+   addresses) -- and tasmota32's defaults already carry the V2. Defining
+   the legacy name compiled BOTH into slot 31 and the build died on
+   redefinition (caught by CI, 2026-08-25, on the runner instead of on
+   a board -- the proof steps working as intended). The guard below is
+   belt only: V2 is default-on, and must never fall out.              */
+#ifndef USE_CCS811_V2
+#define USE_CCS811_V2             /* eCO2 / TVOC @ 0x5A-0x5B (WAKE->GND) */
 #endif
 #ifndef USE_SCD30
 #define USE_SCD30                 /* true CO2 @ 0x61                     */
