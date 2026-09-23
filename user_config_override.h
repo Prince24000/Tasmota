@@ -1,4 +1,5 @@
-*/user_config_override.h - HomeVoice's Tasmota build configuration.
+/*
+ * user_config_override.h — HomeVoice Tasmota build configuration.
 
   GOES AT:  tasmota/user_config_override.h  in the homevoice branch of the
   fork -- INSIDE the tasmota/ folder (the one full of .ino files). The
