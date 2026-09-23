@@ -1,0 +1,141 @@
+# HomeVoice firmware, every ESP32 family.
+#
+# GOES AT: .github/workflows/homevoice-build.yml in the homevoice branch of
+# the Tasmota fork, with ci/prove.py beside it as .github/homevoice/prove.py
+# (see ci/README.md in the hub). The override it builds is
+# tasmota/user_config_override.h in the same branch.
+#
+# One job per family (fail-fast off: a C2 that cannot carry the displays
+# does not stop the S3). Each job builds its env, PROVES the linker map
+# with the hub's own proof, and publishes exactly the two images the hub
+# installs, under the names it expects:
+#     <env>.factory.bin  -> esp_firmware/<env>.factory.bin   (cable, 0x0)
+#     <env>.bin          -> esp_firmware/ota/<env>.bin       (over the air)
+# A family whose proof fails publishes nothing.
+
+name: HomeVoice build
+
+on:
+  push:
+    branches: [homevoice]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [tasmota32, tasmota32s3, tasmota32s2, tasmota32c3, tasmota32c6, tasmota32c2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio*.ini') }}
+          restore-keys: |
+            pio-${{ matrix.env }}-
+            pio-
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      # The compiler reads ONLY tasmota/user_config_override.h. The first
+      # build ever made from this branch had the file at the repo root and
+      # produced a perfectly clean STOCK binary -- the file's own header
+      # tells that story. Refuse loudly instead of building stock again.
+      - name: Check the override is where the compiler reads it
+        run: |
+          if [ ! -f tasmota/user_config_override.h ]; then
+            echo "::error file=tasmota/user_config_override.h::tasmota/user_config_override.h is missing. It must sit INSIDE tasmota/ (the folder full of .ino files); without it this would build stock Tasmota."
+            if [ -f user_config_override.h ]; then
+              echo "::error file=user_config_override.h::Found it at the repo root, where the compiler never looks. Move it to tasmota/user_config_override.h."
+            fi
+            exit 1
+          fi
+          if ! grep -q "HomeVoice" tasmota/user_config_override.h; then
+            echo "::error file=tasmota/user_config_override.h::This is not HomeVoice's override (no 'HomeVoice' in it) -- copy esp_firmware/user_config_override.h from the hub."
+            exit 1
+          fi
+          echo "Override: tasmota/user_config_override.h ($(wc -c < tasmota/user_config_override.h) bytes)"
+
+      - name: Build ${{ matrix.env }}
+        id: build
+        run: pio run -e ${{ matrix.env }}
+
+      - name: Prove what is inside the binary
+        id: prove
+        run: python .github/homevoice/prove.py ${{ matrix.env }} --out dist
+
+      - name: Publish the images
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.env }}
+          path: |
+            dist/${{ matrix.env }}.factory.bin
+            dist/${{ matrix.env }}.bin
+          if-no-files-found: error
+
+      - name: Record the result
+        if: always()
+        run: |
+          mkdir -p result
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            verdict="failed to build"
+          elif [ "${{ steps.prove.outcome }}" != "success" ]; then
+            verdict="built, NOT proven (nothing published)"
+          else
+            verdict="passed"
+          fi
+          echo "${{ matrix.env }}|${verdict}" > result/${{ matrix.env }}.txt
+
+      - name: Keep the result for the summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.env }}
+          path: result/${{ matrix.env }}.txt
+
+  summary:
+    name: Which families passed
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: results
+          merge-multiple: true
+
+      - name: Summary
+        run: |
+          {
+            echo "## HomeVoice build"
+            echo
+            echo "| Family | Result |"
+            echo "|---|---|"
+            for env in tasmota32 tasmota32s3 tasmota32s2 tasmota32c3 tasmota32c6 tasmota32c2; do
+              if [ -f "results/${env}.txt" ]; then
+                verdict=$(cut -d'|' -f2- "results/${env}.txt")
+              else
+                verdict="did not run to the end (see its job)"
+              fi
+              echo "| ${env} | ${verdict} |"
+            done
+            echo
+            echo "Each passed family's artifact holds <env>.factory.bin and <env>.bin: the factory image goes to the hub's esp_firmware/, the other to esp_firmware/ota/ (or send both from the phone: Install firmware from phone)."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
