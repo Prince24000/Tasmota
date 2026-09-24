@@ -31,13 +31,18 @@ from pathlib import Path
 
 # ── the proof: keep in step with esp_firmware/build_firmware.py ────────
 
+#: The entry function is `bool XsnsNN(uint32_t)`. Its mangled name ends in
+#: the letter for uint32_t, and that letter changed: `j` (unsigned int) on
+#: the old toolchain, `m` (unsigned long) since ESP-IDF 5 on EVERY family.
+#: Found 24 Sep 2026: with only `j`, the first all-families run "missed"
+#: all five drivers on S2 and S3 -- builds that were fine. Both accepted.
 REQUIRED_MARKERS = {
-    "RC522 card reader (Xsns80)": r"_z6xsns80j|xsns80\(",
-    "Display core (Xdrv13)": r"_z6xdrv13j|xdrv13\(",
-    "Character LCD (Xdsp01)": r"_z6xdsp01j|xdsp01\(",
-    "TM1637 seven-segment (Xdsp15)": r"_z6xdsp15j|xdsp15\(",
-    "MAX7219 dot matrix (Xdsp19)": r"_z6xdsp19j|xdsp19\(",
-    "MPU6050 IMU (Xsns32)": r"_z6xsns32j|xsns32\(",
+    "RC522 card reader (Xsns80)": r"_z6xsns80[jm]|xsns80\(",
+    "Display core (Xdrv13)": r"_z6xdrv13[jm]|xdrv13\(",
+    "Character LCD (Xdsp01)": r"_z6xdsp01[jm]|xdsp01\(",
+    "TM1637 seven-segment (Xdsp15)": r"_z6xdsp15[jm]|xdsp15\(",
+    "MAX7219 dot matrix (Xdsp19)": r"_z6xdsp19[jm]|xdsp19\(",
+    "MPU6050 IMU (Xsns32)": r"_z6xsns32[jm]|xsns32\(",
 }
 
 DROPPED_BY_TASMOTA = {
@@ -93,7 +98,7 @@ def prove(map_path, drivers, override_text):
     wanted, _notes = expected_markers(override_text)
     for path, _define, entry in drivers:
         wanted[f"custom driver {Path(path).stem} ({entry})"] = \
-            rf"_z\d+{re.escape(entry)}j|{re.escape(entry)}\("
+            rf"_z\d+{re.escape(entry)}[jm]|{re.escape(entry)}\("
     for label, pattern in wanted.items():
         if not re.search(pattern, text):
             missing.append(label)
@@ -158,6 +163,21 @@ def main(argv=None):
                 f"- {'MISSING' if label in missing else 'in'}: {label}\n"
                 for label in wanted) + "\n")
     if missing:
+        # Show what the map DOES say about each missing name, so a marker
+        # that stops matching (as `j` did when uint32_t became `m`) reads
+        # as that in the log, instead of as five drivers gone.
+        try:
+            lines = Path(found["map"]).read_text("utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        for label in missing:
+            name = re.search(r"\((\w+)\)$", label)
+            if not name:
+                continue
+            hits = [ln.strip() for ln in lines if name.group(1).lower() in ln.lower()]
+            print(f"  map lines naming {name.group(1)}: {len(hits)}")
+            for ln in hits[:3]:
+                print(f"      {ln[:160]}")
         print(f"::error::{env}: a green compile is not a proof -- "
               + ", ".join(missing) + " left no trace in the linker map. "
               "No images are published for this env.")
