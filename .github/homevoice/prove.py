@@ -23,6 +23,7 @@ Exit 0 = proven and copied; 1 = anything else, with the reason.
 Standard library only.
 """
 import argparse
+import json
 import os
 import re
 import shutil
@@ -85,7 +86,8 @@ def expected_markers(override_text=""):
 def prove(map_path, drivers, override_text):
     """Which requested drivers are MISSING from the kept part of the map.
     `drivers`: [(path, define, entry)] as the hub passes them; the fork's
-    build has none (custom drivers are built by the hub)."""
+    build names them in .github/homevoice/custom.json when the hub
+    pushed a custom build (cloud_build.py), else there are none."""
     try:
         text = Path(map_path).read_text("utf-8", errors="replace").lower()
     except OSError:
@@ -131,6 +133,8 @@ def main(argv=None):
     ap.add_argument("env", help="the PlatformIO env just built (tasmota32c3)")
     ap.add_argument("--source", default=".", help="the Tasmota tree")
     ap.add_argument("--override", default="tasmota/user_config_override.h")
+    ap.add_argument("--custom", default=".github/homevoice/custom.json",
+                    help="custom drivers the hub sent (a custom build only)")
     ap.add_argument("--out", default="dist",
                     help="folder for <env>.factory.bin and <env>.bin")
     args = ap.parse_args(argv)
@@ -150,10 +154,24 @@ def main(argv=None):
         print(f"::error::{env}: no linker map (build_output/map/{env}.map "
               f"or .pio/build/{env}/firmware.map)")
         return 1
-    missing = prove(found["map"], [], override_text)
+    # A CUSTOM BUILD (the hub pushed it to homevoice-custom) names its
+    # drivers here; each must leave its entry function in the map too.
+    drivers = []
+    custom = Path(args.source) / args.custom
+    if custom.is_file():
+        try:
+            for item in json.loads(custom.read_text("utf-8")):
+                drivers.append((Path(item["file"]), item["define"],
+                                str(item["entry"]).lower()))
+        except (ValueError, KeyError, TypeError) as exc:
+            print(f"::error::{args.custom} is not readable ({exc})")
+            return 1
+        print(f"  custom   {', '.join(p.name for p, _, _ in drivers) or '(none)'}")
+    missing = prove(found["map"], drivers, override_text)
     for label in missing:
         print(f"::error::{env}: NOT in the binary: {label}")
-    wanted = expected_markers(override_text)[0]
+    wanted = list(expected_markers(override_text)[0]) + [
+        f"custom driver {path.stem} ({entry})" for path, _d, entry in drivers]
     for label in wanted:
         print(f"  {'MISSING' if label in missing else 'in     '}  {label}")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
