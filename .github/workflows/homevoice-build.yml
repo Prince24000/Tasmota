@@ -9,16 +9,30 @@
 # does not stop the S3). Each job builds its env, PROVES the linker map
 # with the hub's own proof, and publishes exactly the two images the hub
 # installs, under the names it expects:
-#     <env>.factory.bin  -> esp_firmware/<env>.factory.bin   (cable, 0x0)
-#     <env>.bin          -> esp_firmware/ota/<env>.bin       (over the air)
+#     <env>.factory.bin  (cable, 0x0)
+#     <env>.bin          (over the air)
+# Both go into ONE folder on the hub, esp_firmware/firmware/ -- unzip every
+# family's artifact straight into it.
 # A family whose proof fails publishes nothing.
 
 name: HomeVoice build
+# The hub finds the run it started by the request id in its name
+# (esp_firmware/cloud_build.py). A push or a button press has none.
+run-name: HomeVoice build ${{ inputs.request || github.ref_name }}
 
 on:
   push:
     branches: [homevoice]
   workflow_dispatch:
+    inputs:
+      envs:
+        description: 'Families to build, as a JSON list (empty = all of them)'
+        required: false
+        default: ''
+      request:
+        description: 'Set by the hub, to find this run again'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -31,7 +45,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: [tasmota32, tasmota32s3, tasmota32s2, tasmota32c3, tasmota32c6, tasmota32c2]
+        # Every family, unless the hub asked for some (a custom build for
+        # the boards it has). The list after || is the default.
+        env: ${{ fromJSON(inputs.envs || '["tasmota32","tasmota32s3","tasmota32s2","tasmota32c3","tasmota32c6","tasmota32c2","tasmota32c5","tasmota32p4","tasmota32solo1","tasmota32p4r3","tasmota32-webcam","tasmota32s3-qio_opi"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +88,18 @@ jobs:
           fi
           echo "Override: tasmota/user_config_override.h ($(wc -c < tasmota/user_config_override.h) bytes)"
 
+      # THE HUB'S OWN ENVIRONMENTS -- the same text as chips.EXTRA_ENVS in
+      # the hub (tests/test_boards.py holds the two together). Tasmota reads
+      # platformio_tasmota_cenv.ini as its custom-env file.
+      - name: Define the HomeVoice-only environments
+        run: |
+          cat >> platformio_tasmota_cenv.ini <<'ENVS'
+          [env:tasmota32s3-qio_opi]
+          extends = env:tasmota32s3
+          board = esp32s3-qio_opi
+          build_flags = ${env:tasmota32_base.build_flags} -DFIRMWARE_TASMOTA32 -DUSE_WEBCAM
+          ENVS
+
       - name: Build ${{ matrix.env }}
         id: build
         run: pio run -e ${{ matrix.env }}
@@ -91,10 +119,13 @@ jobs:
           BIN=dist/${{ matrix.env }}.bin
           test -f "$BIN" || { echo "::error::no built image at $BIN"; exit 1; }
           FAILED=0
+          echo "#### ${{ matrix.env }} -- sensors (string in the image)" >> "$GITHUB_STEP_SUMMARY"
           embeds() {  # embeds <label> <string only the driver carries>
             if grep -aiq -- "$2" "$BIN"; then
               echo "in: $1"
+              echo "- in: $1" >> "$GITHUB_STEP_SUMMARY"
             else
+              echo "- MISSING: $1" >> "$GITHUB_STEP_SUMMARY"
               echo "::error::$1 is NOT in the ${{ matrix.env }} image -- its define fell out of tasmota/user_config_override.h (or this family's build drops it)"
               FAILED=1
             fi
@@ -185,10 +216,10 @@ jobs:
               if [ -f "results/${env}.txt" ]; then
                 verdict=$(cut -d'|' -f2- "results/${env}.txt")
               else
-                verdict="did not run to the end (see its job)"
+                verdict="not built this run (not asked for, or see its job)"
               fi
               echo "| ${env} | ${verdict} |"
             done
             echo
-            echo "Each passed family's artifact holds <env>.factory.bin and <env>.bin: the factory image goes to the hub's esp_firmware/, the other to esp_firmware/ota/ (or send both from the phone: Install firmware from phone)."
+            echo "Each passed family's artifact holds <env>.factory.bin and <env>.bin: unzip them all into the hub's esp_firmware/firmware/ (or send both from the phone: Install firmware from phone)."
           } | tee -a "$GITHUB_STEP_SUMMARY"
