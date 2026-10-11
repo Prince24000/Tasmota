@@ -1,5 +1,5 @@
 /*
- * user_config_override.h — HomeVoice Tasmota build configuration.
+  user_config_override.h - HomeVoice's Tasmota build configuration.
 
   GOES AT:  tasmota/user_config_override.h  in the homevoice branch of the
   fork -- INSIDE the tasmota/ folder (the one full of .ino files). The
@@ -7,6 +7,11 @@
   compiler, which reads only tasmota/user_config_override.h, produced a
   perfectly clean stock binary. The URL bar is the check: it must contain
   /homevoice/tasmota/.
+
+  CAMERAS COME FROM THE ENVIRONMENT, not from here: tasmota32-webcam and
+  the hub's tasmota32s3-qio_opi set USE_WEBCAM themselves, and this file
+  rides them like every other build -- so a camera board carries the house
+  drivers too, and no other image pays for a camera it cannot have.
 
   ONE IMAGE FOR EVERY BOARD. Nothing here is per-board; a driver compiled
   in is merely dormant until a template assigns its pins. The cost of a
@@ -32,6 +37,20 @@
 */
 #ifndef _USER_CONFIG_OVERRIDE_H_
 #define _USER_CONFIG_OVERRIDE_H_
+
+/* ---- TLS for Berry's crypto -- 2026-09-24 ---------------------------
+   The first all-families run died on tasmota32s2 in
+   xdrv_52_3_berry_crypto.ino: 'br_sha256_vtable' was not declared. Berry
+   (on in every ESP32 build) always compiles its crypto module, which
+   calls BearSSL -- but tasmota.ino only includes BearSSL when USE_TLS is
+   set, and USE_TLS is only DERIVED (in my_user_config.h, after this file)
+   from USE_WEBCLIENT_HTTPS / USE_MQTT_TLS / USE_AUTOCONF. The classic
+   build gets it via autoconf; that S2 build did not. Asking for HTTPS
+   here makes USE_TLS true for every family the same way. Already on
+   wherever autoconf is, so it costs the classic image nothing.        */
+#ifndef USE_WEBCLIENT_HTTPS
+#define USE_WEBCLIENT_HTTPS
+#endif
 
 /* ---- RFID card reader (RC522, SPI) -- since 2026-08-18 ------------- */
 #define USE_SPI                       /* the bus itself is a compile option */
@@ -207,7 +226,4 @@
                  design job, not a define. Parked with the custom door.
 */
 
-#endif  
-u said sth about access  token for github 
-
-why the specification nf esp s3
+#endif  // _USER_CONFIG_OVERRIDE_H_
