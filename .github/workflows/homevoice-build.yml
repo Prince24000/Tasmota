@@ -47,7 +47,7 @@ jobs:
       matrix:
         # Every family, unless the hub asked for some (a custom build for
         # the boards it has). The list after || is the default.
-        env: ${{ fromJSON(inputs.envs || '["tasmota32","tasmota32s3","tasmota32s2","tasmota32c3","tasmota32c6","tasmota32c2","tasmota32c5","tasmota32p4","tasmota32solo1","tasmota32p4r3","tasmota32-webcam","tasmota32s3-qio_opi"]') }}
+        env: ${{ fromJSON(inputs.envs || '["tasmota32","tasmota32s3","tasmota32s2","tasmota32c3","tasmota32c6","tasmota32c2","tasmota32c5","tasmota32p4","tasmota32solo1","tasmota32p4r3","tasmota32-camera","tasmota32s3-qio_opi"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +94,11 @@ jobs:
       - name: Define the HomeVoice-only environments
         run: |
           cat >> platformio_tasmota_cenv.ini <<'ENVS'
+          [env:tasmota32-camera]
+          extends = env:tasmota32
+          board = esp32-fix
+          build_flags = ${env:tasmota32_base.build_flags} -DFIRMWARE_TASMOTA32 -DUSE_WEBCAM
+
           [env:tasmota32s3-qio_opi]
           extends = env:tasmota32s3
           board = esp32s3-qio_opi
@@ -221,5 +226,5 @@ jobs:
               echo "| ${env} | ${verdict} |"
             done
             echo
-            echo "Each passed family's artifact holds <env>.factory.bin and <env>.bin: unzip them all into the hub's esp_firmware/firmware/ (or send both from the phone: Install firmware from phone)."
+            echo "Each passed family's artifact holds <env>.factory.bin and <env>.bin: unzip them all into the hub's esp_firmware/firmware/ (or from the phone: Custom drivers -> the ⋮ menu -> Install firmware on hub)."
           } | tee -a "$GITHUB_STEP_SUMMARY"
