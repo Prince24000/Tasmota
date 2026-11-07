@@ -44,6 +44,9 @@ REQUIRED_MARKERS = {
     "TM1637 seven-segment (Xdsp15)": r"_z6xdsp15[jm]|xdsp15\(",
     "MAX7219 dot matrix (Xdsp19)": r"_z6xdsp19[jm]|xdsp19\(",
     "MPU6050 IMU (Xsns32)": r"_z6xsns32[jm]|xsns32\(",
+    # The FULL IR driver: only xdrv_05_irremote_full has the IRhvac command
+    # (the small driver has IRsend but no IRhvac).
+    "Full IR, raw send (IRhvac)": r"cmndirhvac",
 }
 
 DROPPED_BY_TASMOTA = {
