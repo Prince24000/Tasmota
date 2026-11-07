@@ -8,6 +8,11 @@
   perfectly clean stock binary. The URL bar is the check: it must contain
   /homevoice/tasmota/.
 
+  CAMERAS COME FROM THE ENVIRONMENT, not from here: the hub's own
+  tasmota32-camera and tasmota32s3-qio_opi set USE_WEBCAM themselves, and this file
+  rides them like every other build -- so a camera board carries the house
+  drivers too, and no other image pays for a camera it cannot have.
+
   ONE IMAGE FOR EVERY BOARD. Nothing here is per-board; a driver compiled
   in is merely dormant until a template assigns its pins. The cost of a
   driver nobody uses is flash space and nothing else -- and the cost of a
@@ -61,6 +66,16 @@
 #define USE_DISPLAY_LCD               /* HD44780 2004/1602 on the I2C backpack */
 #define USE_DISPLAY_TM1637            /* TM1637/TM1638 7-segment digits    */
 #define USE_DISPLAY_MAX7219_MATRIX    /* 8x8 dot-matrix chains             */
+
+/* ---- Full infrared -- 2026-11-07 ------------------------------------
+   The standard build carries a small IR driver: a few protocols, and no
+   way to send a RAW capture -- which is how most air conditioners have to
+   be learned and replayed. The full driver (as in tasmota-ir) knows every
+   protocol IRremoteESP8266 decodes, sends raw timings (IRsend 0,<t>,...),
+   and drives AC units by brand (IRhvac). Bigger, and every ESP32 has room. */
+#ifndef USE_IR_REMOTE_FULL
+#define USE_IR_REMOTE_FULL
+#endif
 
 /* ---- Motion IMU (MPU6050 gyro + accelerometer, I2C 0x68) ----------- */
 #define USE_MPU6050
@@ -221,4 +236,23 @@
                  design job, not a define. Parked with the custom door.
 */
 
+/* ==== PRESENCE: WHO IS IN WHICH ROOM (2026-10-20) ===================
+   Tasmota's own Bluetooth bridge (MI32) and Berry, which run the hub's
+   hv_presence.be (house/presence.py puts it on a board). It stays OFF on
+   every board until the hub turns it on for that board (SetOption115 1).
+   Tasmota's driver compiles to nothing where the chip has no Bluetooth
+   (S2, P4: CONFIG_BT_NIMBLE_ENABLED unset). NOT on the camera builds: the
+   radio is shared with Wi-Fi and the stream needs it. The NimBLE library
+   lives in lib/libesp32_div, which the hub adds to the ESP32 builds
+   (chips.EXTRA_ENVS). About +290 KB of flash and +9 KB of RAM where on. */
+#if defined(ESP32) && !defined(USE_WEBCAM) && !defined(FIRMWARE_SAFEBOOT)
+#ifndef CONFIG_NIMBLE_CPP_IDF
+#define CONFIG_NIMBLE_CPP_IDF 1
+#endif
+#ifndef USE_MI_ESP32
+#define USE_MI_ESP32
+#endif
+#endif
+
 #endif  // _USER_CONFIG_OVERRIDE_H_
+
