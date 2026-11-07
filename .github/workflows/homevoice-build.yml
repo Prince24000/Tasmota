@@ -94,6 +94,12 @@ jobs:
       - name: Define the HomeVoice-only environments
         run: |
           cat >> platformio_tasmota_cenv.ini <<'ENVS'
+          [env:tasmota32_base]
+          lib_extra_dirs = ${common.lib_extra_dirs}
+                           lib/libesp32
+                           lib/libesp32_lvgl
+                           lib/libesp32_div
+
           [env:tasmota32-camera]
           extends = env:tasmota32
           board = esp32-fix
