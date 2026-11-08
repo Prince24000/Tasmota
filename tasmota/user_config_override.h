@@ -252,15 +252,6 @@
 #ifndef USE_MI_ESP32
 #define USE_MI_ESP32
 #endif
-/* Tasmota's own MI32 driver uses MI32.widgetSlot in its scan code without
-   the USE_MI_EXT_GUI guard its struct puts round that member, so any build
-   with MI32 but without the extended GUI fails to compile (seen 2026-11-07,
-   tasmota32s3: "MI32 has no member named widgetSlot"). Turning the GUI on
-   makes the member exist; it only adds the sensor widgets to the board's
-   own web page. */
-#ifndef USE_MI_EXT_GUI
-#define USE_MI_EXT_GUI
-#endif
 #endif
 
 #endif  // _USER_CONFIG_OVERRIDE_H_
