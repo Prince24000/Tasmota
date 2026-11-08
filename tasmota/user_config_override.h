@@ -245,7 +245,13 @@
    radio is shared with Wi-Fi and the stream needs it. The NimBLE library
    lives in lib/libesp32_div, which the hub adds to the ESP32 builds
    (chips.EXTRA_ENVS). About +290 KB of flash and +9 KB of RAM where on. */
-#if defined(ESP32) && !defined(USE_WEBCAM) && !defined(FIRMWARE_SAFEBOOT)
+/* Only where the chip's own build has the Bluetooth stack
+   (CONFIG_BT_NIMBLE_ENABLED, the same switch Tasmota's MI32 driver is
+   compiled under). Without it -- S2, P4 -- the driver's code is left out
+   but Berry still lists its MI32/BLE functions, and the link fails
+   ("undefined reference to be_BLE_run", tasmota32s2, 2026-11-08). */
+#if defined(ESP32) && !defined(USE_WEBCAM) && !defined(FIRMWARE_SAFEBOOT) \
+    && defined(CONFIG_BT_NIMBLE_ENABLED)
 #ifndef CONFIG_NIMBLE_CPP_IDF
 #define CONFIG_NIMBLE_CPP_IDF 1
 #endif
