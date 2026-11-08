@@ -91,32 +91,76 @@ jobs:
       # THE HUB'S OWN ENVIRONMENTS -- the same text as chips.EXTRA_ENVS in
       # the hub (tests/test_boards.py holds the two together). Tasmota reads
       # platformio_tasmota_cenv.ini as its custom-env file.
-      # TASMOTA'S ONE UNGUARDED MI32.widgetSlot -- the same fix as
-      # guard_widget_slot() in the hub's build_firmware.py (keep them alike).
-      - name: Guard MI32 widgetSlot (Tasmota bug)
+      # TASMOTA'S MI32 STATEMENTS THAT NEED THE EXTENDED GUI -- the same
+      # code as guard_mi32_gui() in the hub's build_firmware.py.
+      - name: Guard MI32 GUI-only statements (Tasmota bug)
         shell: python
         run: |
-          from pathlib import Path
-          p = Path("tasmota/tasmota_xsns_sensor/xsns_62_esp32_mi.ino")
-          if p.is_file():
-              out, stack, n = [], [], 0
-              for line in p.read_text("utf-8", errors="replace").split("\n"):
+          def guard_mi32_gui(ino, h=""):
+              """(ino text, lines wrapped): every statement in Tasmota's MI32 driver that
+              uses something its code only defines under USE_MI_EXT_GUI -- a function
+              defined only inside that guard (the .ino), or a struct member declared
+              only inside it (the .h) -- and stands outside the guard gets its own
+              #ifdef USE_MI_EXT_GUI / #endif. Only standalone statements are wrapped
+              (never the body of a brace-less if/else/for/while). Idempotent."""
+              import re
+
+              def flags(lines):
+                  stack, out = [], []
+                  for line in lines:
+                      t = line.strip()
+                      if t.startswith("#if"):
+                          stack.append(t)
+                      elif t.startswith("#endif") and stack:
+                          stack.pop()
+                      elif t.startswith(("#else", "#elif")) and stack:
+                          stack[-1] = "#else"
+                      out.append(any("USE_MI_EXT_GUI" in s for s in stack))
+                  return out
+
+              lines = ino.split("\n")
+              guarded = flags(lines)
+              defs = {}
+              for line, g in zip(lines, guarded):
+                  m = re.match(r"^[A-Za-z_][\w\s\*&:<>,]*?\b([A-Za-z_]\w*)\s*\([^;]*$", line)
+                  if m and not line.lstrip().startswith(("#", "//", "return", "if", "else")):
+                      defs.setdefault(m.group(1), []).append(g)
+              gui_fns = {n for n, gs in defs.items() if gs and all(gs)}
+              members = set()
+              hlines = h.split("\n") if h else []
+              for line, g in zip(hlines, flags(hlines)):
+                  m = re.match(r"^\s*[A-Za-z_][\w\s\*:<>]*?\b([A-Za-z_]\w*)\s*(\[[^\]]*\])?\s*(=[^;]*)?;", line)
+                  if g and m and not line.strip().startswith("#"):
+                      members.add(m.group(1))
+              uses = [re.compile(r"\b" + re.escape(n) + r"\s*\(") for n in sorted(gui_fns)]
+              uses += [re.compile(r"\bMI32\." + re.escape(n) + r"\b") for n in sorted(members)]
+
+              out, wrapped, prev = [], 0, ""
+              for line, g in zip(lines, guarded):
                   t = line.strip()
-                  if t.startswith("#if"):
-                      stack.append(t)
-                  elif t.startswith("#endif") and stack:
-                      stack.pop()
-                  elif t.startswith(("#else", "#elif")) and stack:
-                      stack[-1] = "#else"
-                  if ("MI32.widgetSlot" in line and not t.startswith("#")
-                          and not any("USE_MI_EXT_GUI" in s for s in stack)):
+                  code = t.split("//", 1)[0].strip()
+                  braceless = re.search(r"(\)|\belse)\s*$", prev) is not None and \
+                      not prev.endswith("{")
+                  if (not g and code and not t.startswith("#") and code.endswith(";")
+                          and not braceless and any(u.search(code) for u in uses)):
                       out += ["#ifdef USE_MI_EXT_GUI", line,
                               "#endif  // USE_MI_EXT_GUI (added by HomeVoice)"]
-                      n += 1
+                      wrapped += 1
                   else:
                       out.append(line)
-              p.write_text("\n".join(out), "utf-8")
-              print(f"wrapped {n} unguarded widgetSlot line(s)")
+                  if code and not t.startswith("#"):
+                      prev = code
+              return "\n".join(out), wrapped
+
+          from pathlib import Path
+          ino = Path("tasmota/tasmota_xsns_sensor/xsns_62_esp32_mi.ino")
+          hdr = Path("tasmota/include/xsns_62_esp32_mi.h")
+          if ino.is_file():
+              h = hdr.read_text("utf-8", errors="replace") if hdr.is_file() else ""
+              fixed, n = guard_mi32_gui(ino.read_text("utf-8", errors="replace"), h)
+              ino.write_text(fixed, "utf-8")
+              print(f"wrapped {n} MI32 statement(s) in USE_MI_EXT_GUI")
+
 
       - name: Define the HomeVoice-only environments
         run: |
