@@ -91,6 +91,33 @@ jobs:
       # THE HUB'S OWN ENVIRONMENTS -- the same text as chips.EXTRA_ENVS in
       # the hub (tests/test_boards.py holds the two together). Tasmota reads
       # platformio_tasmota_cenv.ini as its custom-env file.
+      # TASMOTA'S ONE UNGUARDED MI32.widgetSlot -- the same fix as
+      # guard_widget_slot() in the hub's build_firmware.py (keep them alike).
+      - name: Guard MI32 widgetSlot (Tasmota bug)
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path("tasmota/tasmota_xsns_sensor/xsns_62_esp32_mi.ino")
+          if p.is_file():
+              out, stack, n = [], [], 0
+              for line in p.read_text("utf-8", errors="replace").split("\n"):
+                  t = line.strip()
+                  if t.startswith("#if"):
+                      stack.append(t)
+                  elif t.startswith("#endif") and stack:
+                      stack.pop()
+                  elif t.startswith(("#else", "#elif")) and stack:
+                      stack[-1] = "#else"
+                  if ("MI32.widgetSlot" in line and not t.startswith("#")
+                          and not any("USE_MI_EXT_GUI" in s for s in stack)):
+                      out += ["#ifdef USE_MI_EXT_GUI", line,
+                              "#endif  // USE_MI_EXT_GUI (added by HomeVoice)"]
+                      n += 1
+                  else:
+                      out.append(line)
+              p.write_text("\n".join(out), "utf-8")
+              print(f"wrapped {n} unguarded widgetSlot line(s)")
+
       - name: Define the HomeVoice-only environments
         run: |
           cat >> platformio_tasmota_cenv.ini <<'ENVS'
